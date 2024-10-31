@@ -123,11 +123,18 @@ void trace_syscalls(pid_t target_pid) {
 	struct iovec iov;
 	struct user_pt_regs regs;
 	
+	iov.iov_base = &regs;
+	iov.iov_len = sizeof(regs);
+	
 	long syscall = -1;
 	char filename[4096] = {0};
 	
 	while (1) {
-		ptrace(PTRACE_SYSCALL, target_pid, NULL, NULL);
+		if (ptrace(PTRACE_SYSCALL, target_pid, NULL, NULL) == -1) {
+			perror("ptrace(PTRACE_SYSCALL)");
+			break;
+		}
+		
 		waitpid(target_pid, &status, 0);
 		
 		// Check if the target process has exited
@@ -137,10 +144,6 @@ void trace_syscalls(pid_t target_pid) {
 		}
 		
 		// onEnter
-		// Get the register set to find out which syscall is being called
-		iov.iov_base = &regs;
-		iov.iov_len = sizeof(regs);
-		
 		if (ptrace(PTRACE_GETREGSET, target_pid, NT_PRSTATUS, &iov) == -1) {
 			perror("ptrace(PTRACE_GETREGSET)");
 			break;
@@ -148,7 +151,6 @@ void trace_syscalls(pid_t target_pid) {
 		
 		// Check the syscall number (x8 on ARM64)
 		syscall = regs.regs[8]; // x8 contains the syscall number
-		
 		
 		// intercept syscall read function 
 		if (syscall == __NR_openat) {
@@ -172,14 +174,10 @@ void trace_syscalls(pid_t target_pid) {
 		// onLeave
 		
 		// Get the register set to find out which syscall is being called
-		iov.iov_base = &regs;
-		iov.iov_len = sizeof(regs);
-		
 		if (ptrace(PTRACE_GETREGSET, target_pid, NT_PRSTATUS, &iov) == -1) {
 			perror("ptrace(PTRACE_GETREGSET)");
 			break;
 		}
-		
 		
 		// intercept syscall read function 
 		if (syscall == __NR_openat) {
